@@ -1,4 +1,4 @@
-FROM ubuntu:quantal
+FROM ubuntu:trusty
 MAINTAINER Florian Kasper <mosny@zyg.li>
 
 # VMAIL
@@ -7,8 +7,8 @@ RUN mkdir -p /var/mail/vmail
 RUN useradd -d /var/mail/vmail -M -N --gid 10000 --uid 10000 vmail
 RUN chown -R vmail:vmail /var/mail/vmail
 
-RUN apt-get update -yqq
-RUN apt-get upgrade -yqq
+RUN apt-get update -y -q
+RUN apt-get upgrade -y -q
 
 
 # Allow postfix to install without interaction.
@@ -17,14 +17,11 @@ RUN echo "postfix postfix/main_mailer_type string 'Internet Site'" | debconf-set
 
 
 # Install packages
-RUN apt-get install -yqq supervisor postgresql postfix postgrey postfix-pcre postfix-pgsql policyd-weight dovecot-common dovecot-core dovecot-gssapi dovecot-imapd dovecot-ldap dovecot-lmtpd dovecot-pgsql dovecot-sieve
+RUN apt-get install -y -q supervisor postfix postfix-pcre policyd-weight dovecot-common dovecot-core dovecot-gssapi dovecot-imapd dovecot-ldap dovecot-lmtpd dovecot-sieve
 
-RUN service postgresql stop
 # Allow connections from anywhere.
-RUN sed -i -e"s/^#listen_addresses =.*$/listen_addresses = '*'/" /etc/postgresql/9.1/main/postgresql.conf
-RUN echo "host    all    all    0.0.0.0/0    md5" >> /etc/postgresql/9.1/main/pg_hba.conf
-
 ADD supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+
 # Copy postfix configuration
 ADD postfix/master.cf /etc/postfix/master.cf
 ADD postfix/body_checks /etc/postfix/body_checks
@@ -62,9 +59,6 @@ ADD dovecot/conf.d/90-sieve.conf /etc/dovecot/conf.d/90-sieve.conf
 ADD dovecot/conf.d/auth-sql.conf.ext /etc/dovecot/conf.d/auth-sql.conf.ext
 ADD dovecot/dovecot-sql.conf.ext /etc/dovecot/dovecot-sql.conf.ext
 
-
-
-
 ADD template.sh /template
 RUN chmod +x /template
 
@@ -77,12 +71,7 @@ CMD exec "/bootstrap.sh"
 
 RUN chown -R postfix:postfix /etc/postfix
 
-
-ADD postgresql/postgresql.conf /etc/postgresql/9.1/main/postgresql.conf
-RUN chown -R postgres:postgres /etc/postgresql
-RUN chmod -R 700 /etc/postgresql
-
-RUN apt-get install -yqq rsyslog wget
+RUN apt-get install -y -q rsyslog wget
 RUN service rsyslog stop
 ADD rsyslog/rsyslog.conf /etc/rsyslog.conf
 
@@ -92,4 +81,4 @@ EXPOSE 143
 EXPOSE 993
 
 ADD start.sh /start.sh
-entrypoint ["/start.sh"]
+ENTRYPOINT ["/start.sh"]
