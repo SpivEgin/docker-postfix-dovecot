@@ -1,84 +1,47 @@
 FROM ubuntu:trusty
-MAINTAINER Florian Kasper <mosny@zyg.li>
+MAINTAINER Paulo Cesar <email@pocesar.e4ward.com>
+
+ENV DEBIAN_FRONTEND noninteractive
+
+RUN apt-get update -y -q && apt-get dist-upgrade -y -q
 
 # VMAIL
-RUN groupadd --gid 10000 vmail
-RUN mkdir -p /var/mail/vmail
-RUN useradd -d /var/mail/vmail -M -N --gid 10000 --uid 10000 vmail
-RUN chown -R vmail:vmail /var/mail/vmail
-
-RUN apt-get update -y -q
-RUN apt-get upgrade -y -q
-
-
-# Allow postfix to install without interaction.
-RUN echo "postfix postfix/mailname string example.com" | debconf-set-selections
-RUN echo "postfix postfix/main_mailer_type string 'Internet Site'" | debconf-set-selections
-
+RUN groupadd -g 5000 vmail
+RUN useradd -m -u 5000 -g 5000 -s /bin/bash vmail
 
 # Install packages
-RUN apt-get install -y -q supervisor postfix postfix-pcre policyd-weight dovecot-common dovecot-core dovecot-gssapi dovecot-imapd dovecot-ldap dovecot-lmtpd dovecot-sieve
+RUN  apt-get install -y -q pwgen postfix postfix-pcre dovecot-common dovecot-core dovecot-imapd opendkim opendkim-tools
 
-# Allow connections from anywhere.
-ADD supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+ADD dovecot/dovecot.conf /etc/dovecot/dovecot.conf
+ADD opendkim/opendkim.conf /etc/opendkim.conf
 
-# Copy postfix configuration
-ADD postfix/master.cf /etc/postfix/master.cf
-ADD postfix/body_checks /etc/postfix/body_checks
+RUN mkdir -p /etc/opendkim/keys
+RUN [ ! -e "/etc/opendkim/TrustedHosts" ] && touch /etc/opendkim/TrustedHosts
+RUN [ ! -e "/etc/opendkim/KeyTable" ] && touch /etc/opendkim/KeyTable
+RUN [ ! -e "/etc/opendkim/SigningTable" ] && touch /etc/opendkim/SigningTable
+RUN cat $TRUSTED_HOSTS >> /etc/opendkim/TrustedHosts
+RUN echo 'SOCKET="inet:12301@localhost"' >> /etc/default/opendkim
+RUN postconf -e 'milter_protocol = 2'
+RUN postconf -e 'milter_default_action = accept'
+RUN postconf -e 'smtpd_milters = inet:localhost:12301'
+RUN postconf -e 'non_smtpd_milters = inet:localhost:12301'
+RUN postconf -e 'virtual_mailbox_domains = /etc/postfix/vhosts'
+RUN postconf -e 'virtual_mailbox_base = /home/vmail'
+RUN postconf -e 'virtual_mailbox_maps = hash:/etc/postfix/vmaps'
+RUN postconf -e 'virtual_minimum_uid = 1000'
+RUN postconf -e 'virtual_uid_maps = static:5000'
+RUN postconf -e 'virtual_gid_maps = static:5000'
+RUN sed -i 's/#submission/submission/' /etc/postfix/master.cf
 
-# Access checks
-ADD postfix/access_recipient_rfc /etc/postfix/access_recipient_rfc
-ADD postfix/access_recipient /etc/postfix/access_recipient
-ADD postfix/access_client /etc/postfix/access_client
-ADD postfix/access_helo /etc/postfix/access_helo
-ADD postfix/access_sender /etc/postfix/access_sender
-
-RUN postmap btree:/etc/postfix/access_recipient
-RUN postmap btree:/etc/postfix/access_recipient_rfc
-RUN postmap btree:/etc/postfix/access_helo
-RUN postmap btree:/etc/postfix/access_sender
-RUN postmap btree:/etc/postfix/access_client
-
-# Dovecot
-ADD dovecot/conf.d/10-auth.conf /etc/dovecot/conf.d/10-auth.conf
-ADD dovecot/conf.d/10-director.conf /etc/dovecot/conf.d/10-director.conf
-ADD dovecot/conf.d/10-mail.conf /etc/dovecot/conf.d/10-mail.conf
-ADD dovecot/conf.d/10-logging.conf /etc/dovecot/conf.d/10-logging.conf
-ADD dovecot/conf.d/10-master.conf /etc/dovecot/conf.d/10-master.conf
-ADD dovecot/conf.d/10-ssl.conf /etc/dovecot/conf.d/10-ssl.conf
-ADD dovecot/conf.d/15-lda.conf /etc/dovecot/conf.d/15-lda.conf
-ADD dovecot/conf.d/15-mailboxes.conf /etc/dovecot/conf.d/15-mailboxes.conf
-ADD dovecot/conf.d/20-lmtp.conf /etc/dovecot/conf.d/20-lmtp.conf
-
-RUN mkdir /etc/dovecot/dovecot-acls
-RUN touch /var/log/dovecot.log
-ADD dovecot/conf.d/90-acl.conf /etc/dovecot/conf.d/90-acl.conf
-ADD dovecot/conf.d/90-plugin.conf /etc/dovecot/conf.d/90-plugin.conf
-ADD dovecot/conf.d/90-sieve.conf /etc/dovecot/conf.d/90-sieve.conf
-
-ADD dovecot/conf.d/auth-sql.conf.ext /etc/dovecot/conf.d/auth-sql.conf.ext
-ADD dovecot/dovecot-sql.conf.ext /etc/dovecot/dovecot-sql.conf.ext
-
-ADD template.sh /template
-RUN chmod +x /template
-
-ADD postfix/header_checks /etc/postfix/header_checks
-ADD postfix/main.cf /etc/postfix/main.cf
-ADD postfix/dynamicmaps.cf /etc/postfix/dynamicmaps.cf
-
-ADD bootstrap.sh /bootstrap.sh
-CMD exec "/bootstrap.sh"
-
-RUN chown -R postfix:postfix /etc/postfix
-
-RUN apt-get install -y -q rsyslog wget
-RUN service rsyslog stop
-ADD rsyslog/rsyslog.conf /etc/rsyslog.conf
-
-# Port configuration
-EXPOSE 25
-EXPOSE 143
+# SMTPS
+EXPOSE 465
+# IMAP over SSL
 EXPOSE 993
+# Submission
+EXPOSE 587
 
-ADD start.sh /start.sh
-ENTRYPOINT ["/start.sh"]
+ADD entry.sh /entry.sh
+RUN chmod +x /entry.sh
+
+ENTRYPOINT ["/entry.sh"]
+
