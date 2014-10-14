@@ -15,22 +15,8 @@ fi
 )
 
 # VMAIL
-groupadd -g 5000 vmail
-useradd -u 5000 -g 5000 -s /bin/bash vmail
-
-sed -i 's/#START/START/' /etc/default/saslauthd
-
-(
-  mkdir /etc/postfix/ssl
-  cd /etc/postfix/ssl/
-  openssl genrsa -des3 -rand /etc/hosts -out smtpd.key 1024
-  chmod 600 smtpd.key
-  openssl req -new -key smtpd.key -out smtpd.csr
-  openssl x509 -req -days 3650 -in smtpd.csr -signkey smtpd.key -out smtpd.crt
-  openssl rsa -in smtpd.key -out smtpd.key.unencrypted
-  mv -f smtpd.key.unencrypted smtpd.key
-  openssl req -new -x509 -extensions v3_ca -keyout cakey.pem -out cacert.pem -days 3650
-)
+groupadd -g 5000 vmail > /dev/null
+useradd -u 5000 -g 5000 -s /bin/bash vmail > /dev/null
 
 postconf -e 'milter_protocol = 2'
 postconf -e 'milter_default_action = accept'
@@ -39,24 +25,25 @@ postconf -e 'non_smtpd_milters = inet:localhost:12301'
 postconf -e 'virtual_mailbox_domains = /etc/postfix/vhosts'
 postconf -e 'virtual_mailbox_base = /home/vmail'
 postconf -e 'virtual_mailbox_maps = hash:/etc/postfix/vmaps'
+postconf -e 'smtpd_tls_key_file = /etc/ssl/private/postfix.pem'
+postconf -e 'smtpd_tls_cert_file = /etc/ssl/certs/postfix.pem'
 postconf -e 'virtual_minimum_uid = 1000'
 postconf -e 'virtual_uid_maps = static:5000'
 postconf -e 'virtual_gid_maps = static:5000'
+postconf -e 'smtpd_helo_required = yes'
 postconf -e 'smtpd_sasl_auth_enable = yes'
-postconf -e 'smtpd_sasl_security_options = noplaintext,noanonymous'
-postconf -e 'smtpd_recipient_restrictions = permit_sasl_authenticated,permit_mynetworks,reject_unauth_destination'
+postconf -e 'smtpd_sasl_security_options = noanonymous'
+postconf -e 'smtpd_relay_restrictions = permit_mynetworks, permit_sasl_authenticated, reject_unauth_destination'
 postconf -e 'smtpd_sasl_type = dovecot'
-postconf -e 'smtpd_sasl_path = private/auth-client'
-postconf -e 'smtpd_tls_auth_only = yes'
+postconf -e 'smtpd_sasl_path = private/auth'
+postconf -e 'smtpd_tls_auth_only = no'
+postconf -e 'smtpd_sasl_authenticated_header = yes'
 postconf -e 'smtp_tls_security_level = may'
 postconf -e 'smtpd_tls_security_level = may'
 postconf -e 'smtp_use_tls = yes'
 postconf -e 'local_recipient_maps ='
 postconf -e 'smtpd_use_tls = yes'
 postconf -e 'smtp_tls_note_starttls_offer = yes'
-postconf -e 'smtpd_tls_key_file = /etc/postfix/ssl/smtpd.key'
-postconf -e 'smtpd_tls_cert_file = /etc/postfix/ssl/smtpd.crt'
-postconf -e 'smtpd_tls_CAfile = /etc/postfix/ssl/cacert.pem'
 postconf -e 'smtpd_tls_loglevel = 1'
 postconf -e 'smtpd_tls_received_header = yes'
 postconf -e 'smtpd_tls_session_cache_timeout = 3600s'
@@ -72,8 +59,7 @@ test -f /etc/opendkim/TrustedHosts || touch /etc/opendkim/TrustedHosts
 test -f /etc/opendkim/KeyTable || touch /etc/opendkim/KeyTable
 test -f /etc/opendkim/SigningTable || touch /etc/opendkim/SigningTable
 
-echo 'SOCKET="inet:12301@localhost"' >> /etc/default/opendkim
-echo "mech_list: cram-md5" > /etc/postfix/sasl/smtpd.conf
+echo 'SOCKET="inet:12301@localhost"' > /etc/default/opendkim
 
 while [ $# -gt 0 ]
 do
@@ -130,9 +116,10 @@ do
             passwd=$(pwgen)
             passhash=$(doveadm pw -p $passwd -u $user)
             echo "Adding password for $user@$domain to /etc/dovecot/passwd: $passwd"
-            if [[ ! -x /etc/dovecot/passwd ]]
+            if [[ ! -f /etc/dovecot/passwd ]]
             then
               touch /etc/dovecot/passwd
+              chown root:dovecot /etc/dovecot/passwd
               chmod 640 /etc/dovecot/passwd
             fi
             echo "$user@$domain:$passhash" >> /etc/dovecot/passwd
@@ -161,6 +148,17 @@ do
   shift
 done
 
-postconf -e "myhostname=$mailname"
+postconf -e "myhostname = $mailname"
+subj="/C=US/ST=Denial/L=Springfield/O=Dis/CN=$mailname"
+
+if [[ ! -a '/etc/ssl/certs/dovecot.pem' ]]
+then
+  openssl req -new -x509 -days 3650 -nodes -out /etc/ssl/certs/dovecot.pem -keyout /etc/ssl/private/dovecot.pem -subj $subj
+fi
+
+if [[ ! -a '/etc/ssl/certs/postfix.pem' ]]
+then
+  openssl req -new -x509 -days 3650 -nodes -out /etc/ssl/certs/postfix.pem -keyout /etc/ssl/private/postfix.pem -subj $subj
+fi
 
 supervisord -n -c /etc/supervisor/conf.d/supervisord.conf

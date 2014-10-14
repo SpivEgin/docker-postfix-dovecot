@@ -16,14 +16,19 @@
 #tlsproxy  unix  -       -       -       -       0       tlsproxy
 submission inet n       -       -       -       -       smtpd
   -o syslog_name=postfix/submission
+  -o smtpd_sasl_type=dovecot
+  -o smtpd_sasl_path=private/auth
+  -o smtpd_sasl_security_options=noanonymous
+  -o smtpd_sasl_local_domain=$myhostname
   -o smtpd_tls_security_level=encrypt
   -o smtpd_sasl_auth_enable=yes
+  -o smtpd_sender_restrictions=reject_sender_login_mismatch
   -o smtpd_client_restrictions=permit_sasl_authenticated,reject
 smtps     inet  n       -       -       -       -       smtpd
   -o syslog_name=postfix/smtps
   -o smtpd_sasl_auth_enable=yes
   -o smtpd_reject_unlisted_sender=yes
-  -o smtpd_recipient_restrictions=permit_sasl_authenticated,reject
+  -o smtpd_client_restrictions=permit_sasl_authenticated,reject
   -o broken_sasl_auth_clients=yes
 #  #628       inet  n       -       -       -       -       qmqpd
 pickup    unix  n       -       -       60      1       pickup
@@ -39,7 +44,7 @@ verify    unix  -       -       -       -       1       verify
 flush     unix  n       -       -       1000?   0       flush
 proxymap  unix  -       -       n       -       -       proxymap
 proxywrite unix -       -       n       -       1       proxymap
-#smtp      unix  -       -       -       -       -       smtp
+smtp      unix  -       -       -       -       -       smtp
 relay     unix  -       -       -       -       -       smtp
 #       -o smtp_helo_timeout=5 -o smtp_connect_timeout=5
 showq     unix  n       -       -       -       -       showq
