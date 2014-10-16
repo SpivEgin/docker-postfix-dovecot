@@ -48,7 +48,7 @@ postconf -e 'smtpd_tls_loglevel = 1'
 postconf -e 'smtpd_tls_received_header = yes'
 postconf -e 'smtpd_tls_session_cache_timeout = 3600s'
 postconf -e 'tls_random_source = dev:/dev/urandom'
-
+postconf -e 'smtpd_tls_mandatory_protocols = !SSLv2, !SSLv3'
 
 test -f /etc/postfix/vhosts || touch /etc/postfix/vhosts
 test -f /etc/postfix/vmaps || touch /etc/postfix/vmaps
