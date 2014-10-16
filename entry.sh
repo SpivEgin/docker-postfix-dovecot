@@ -17,11 +17,12 @@ fi
 # VMAIL
 groupadd -g 5000 vmail > /dev/null
 useradd -u 5000 -g 5000 -s /bin/bash vmail > /dev/null
+usermod -G opendkim postfix
 
 postconf -e 'milter_protocol = 2'
 postconf -e 'milter_default_action = accept'
-postconf -e 'smtpd_milters = inet:localhost:12301'
-postconf -e 'non_smtpd_milters = inet:localhost:12301'
+postconf -e 'smtpd_milters = inet:127.0.0.1:12301'
+postconf -e 'non_smtpd_milters = $smtpd_milters'
 postconf -e 'virtual_mailbox_domains = /etc/postfix/vhosts'
 postconf -e 'virtual_mailbox_base = /home/vmail'
 postconf -e 'virtual_mailbox_maps = hash:/etc/postfix/vmaps'
@@ -59,7 +60,7 @@ test -f /etc/opendkim/TrustedHosts || touch /etc/opendkim/TrustedHosts
 test -f /etc/opendkim/KeyTable || touch /etc/opendkim/KeyTable
 test -f /etc/opendkim/SigningTable || touch /etc/opendkim/SigningTable
 
-echo 'SOCKET="inet:12301@localhost"' > /etc/default/opendkim
+echo -e 'SOCKET="inet:12301@localhost"\n' > /etc/default/opendkim
 
 while [ $# -gt 0 ]
 do
@@ -91,8 +92,8 @@ do
           echo "Creating OpenDKIM folder $dkim"
           mkdir -p $dkim
           cd $dkim && opendkim-genkey -s mail -d $domain
-          chown opendkim:opendkim $dkim/mail.private
-          echo "*.$domain" >> /etc/opendkim/TrustedHosts
+          chown -R opendkim:opendkim /etc/opendkim/keys/
+          echo -e "127.0.0.1\nlocalhost\n192.168.0.1/24\n*.$domain" >> /etc/opendkim/TrustedHosts
           echo "*@$domain mail._domainkey.$domain" >> /etc/opendkim/SigningTable
           echo "mail._domainkey.$domain $domain:mail:$dkim/mail.private" >> /etc/opendkim/KeyTable
           cat "$dkim/mail.txt"
