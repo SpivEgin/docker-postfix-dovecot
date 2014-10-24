@@ -25,7 +25,7 @@ EXPOSE 587
 ADD entry.sh /entry.sh
 RUN chmod +x /entry.sh
 
-VOLUME ["/home/vmail/","/var/log/","/etc/ssl","/etc/postfix","/etc/dovecot","/etc/opendkim"]
+VOLUME ["/home/vmail", "/var/log", "/etc/ssl", "/etc/postfix", "/etc/dovecot", "/etc/opendkim"]
 
 ENTRYPOINT ["/entry.sh"]
 
